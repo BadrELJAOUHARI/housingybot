@@ -2,14 +2,13 @@ name: SE watcher
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # every 10 minutes
-  workflow_dispatch: {}       # "Run workflow" button in Actions tab
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
 
-# Needed so the workflow can commit seen.json back to the repo
 permissions:
   contents: write
+  actions: write
 
-# Prevent two runs overlapping if one is slow
 concurrency:
   group: se-watcher
   cancel-in-progress: false
@@ -17,7 +16,9 @@ concurrency:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
       - uses: actions/checkout@v4
 
@@ -28,11 +29,16 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Run scraper
+      - name: Run scraper in a loop
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:  ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scraper.py
+        run: |
+          for i in 1 2 3 4; do
+            echo "=== iteration $i ==="
+            python scraper.py || true
+            if [ $i -lt 4 ]; then sleep 60; fi
+          done
 
       - name: Commit updated seen.json
         run: |
