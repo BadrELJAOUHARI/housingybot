@@ -1,81 +1,179 @@
-# Student Experience watcher
+# 🏠 HousingyBot
 
-Pings you on Telegram the moment a long-stay studio opens up at Amsterdam Amstel, NDSM, Zuidas, Minervahaven, or Leiden. Runs every 10 minutes on GitHub Actions, 24/7, free.
+### A configurable, permission-first public listing monitor
 
-## Setup — 4 steps, ~5 minutes
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![Automation](https://img.shields.io/badge/Automation-Manual_by_Default-2563EB?logo=githubactions&logoColor=white)
+![Telegram](https://img.shields.io/badge/Alerts-Telegram-26A5E4?logo=telegram&logoColor=white)
+![Access](https://img.shields.io/badge/Access-Permission_Required-237A57)
 
-### 1. Create a Telegram bot
+**Turn an authorized public listing page into targeted alerts, without manually refreshing it.**
 
-- Open Telegram → chat with **@BotFather** → send `/newbot` → pick a name and a username ending in `_bot`.
-- BotFather gives you a **token** (long string like `7123…:AAH…`). Save it.
-- Search for your new bot, open a chat with it, send any message (e.g. "hi").
-- Open this URL in your browser, replacing `<TOKEN>`:
-  `https://api.telegram.org/bot<TOKEN>/getUpdates`
-- Find `"chat":{"id":123456789` — that number is your **chat ID**. Save it.
+HousingyBot began as a personal student-housing notification prototype. This version generalizes the same Python skills into a **configurable one-page monitor** for *websites that explicitly permit the proposed automated access*. There is **no built-in target website**, no automatic schedule, and no feature for evading access controls.
 
-### 2. Create a PRIVATE GitHub repo
+> [!IMPORTANT]
+> **This is a technical compliance-oriented template, not legal clearance.** Public availability, a missing prohibition in terms, or an accessible `robots.txt` path do **not** establish legal permission. Operators must verify the website's applicable terms, relevant rights and laws, and permitted access frequency before configuring a live website. See [Responsible use](#responsible-use).
 
-- New repo on GitHub → **Private**. Upload all files from this folder (drag & drop in the web UI works).
-- Or with git:
-  ```
-  git init && git add . && git commit -m "initial"
-  git branch -M main
-  git remote add origin https://github.com/YOU/se-watcher.git
-  git push -u origin main
-  ```
+## Why build this?
 
-### 3. Add 2 secrets
+Time-sensitive public listings—such as housing, event tickets, equipment rentals or job postings—can require repeated manual checking. HousingyBot illustrates a small monitoring pipeline: **fetch → parse → filter → compare with history → notify**. The tool focuses on engineering patterns instead of any specific commercial website.
 
-Repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**.
+## How it works
 
-| Name | Value |
+```mermaid
+flowchart TD
+    A[Operator selects a permitted source] --> B{Permission configured?}
+    B -- No --> X[Stop: no requests]
+    B -- Yes --> C{Minimum interval passed?}
+    C -- No --> X
+    C -- Yes --> D{Robots rules permit this path?}
+    D -- No / unknown --> X
+    D -- Yes --> E[Fetch one HTML listing page]
+    E --> F[Extract items using configured CSS selectors]
+    F --> G[Filter keywords and compare listing IDs]
+    G --> H{New listings?}
+    H -- No --> I[Record check time]
+    H -- Yes --> J[Send Telegram alerts]
+    J --> K[Remember successfully alerted IDs]
+```
+
+### Features
+
+| Capability | Implementation |
 |---|---|
-| `TELEGRAM_BOT_TOKEN` | token from step 1 |
-| `TELEGRAM_CHAT_ID`   | chat id from step 1 |
+| Website-agnostic parsing | CSS selectors defined in `config.json` |
+| Explicit operator consent gate | Requires a permission confirmation and documented basis before fetching |
+| Robots checks | Reads the source host's `robots.txt` and blocks disallowed paths |
+| Conservative traffic | At most one listing-page request per execution, a 1-hour minimum interval, no automatic schedule |
+| Narrow data collection | Only listing title, URL, optional price and location; up to 100 cards |
+| Duplicate prevention | Locally hashed listing URLs stored in `seen.json` |
+| Alert delivery | Telegram Bot API; mark a listing as seen only after a successful response |
+| Offline testing | Seven unit tests using static HTML and mocks, no live scraping |
 
-### 4. Enable Actions & run once
+## Project structure
 
-- Repo → **Actions** tab → if asked, click "I understand, enable workflows".
-- Click **SE watcher** → **Run workflow** (green button). Wait ~1 min.
-- Click into the run. If you see `Parsed N studios total, M match wanted locations` in the log, it works.
-- If a studio is currently listed at one of your 5 complexes, you'll get a Telegram ping.
+```text
+housingybot/
+├── .github/
+│   └── workflows/
+│       └── scrape.yml        # Manual execution only
+├── tests/
+│   └── test_scraper.py       # Offline tests
+├── scraper.py               # Generic listing parser and notifier
+├── config.example.json      # Non-operational configuration template
+├── requirements.txt
+├── seen.json                # Non-personal deduplication state
+├── .gitignore
+└── README.md
+```
 
-**Done.** It now runs on its own every 10 minutes, forever.
+## Setup
 
----
+### 1. Check authorization **before** configuring any live website
 
-## What it does, exactly
+Prefer the site's documented **public API, RSS feed, export, or other approved automated interface** if available. Otherwise, check that automated requests to the precise page and at the intended rate are *expressly permitted* by written authorization or a published policy. Keep a reference to that authorization. If the site's terms are simply **silent**, do not treat that alone as approval.
 
-- Fetches `https://studentexperience.com/studios?los=longstay`
-- Parses the page's embedded Next.js JSON (stable) with HTML fallback
-- Filters for: Amsterdam Amstel, NDSM, Zuidas, Minervahaven, Leiden
-- Skips studios already alerted (tracked in `seen.json`, auto-committed by the workflow)
-- Sends one Telegram message per new studio, with price, size, location, and link
+The script requires either `written-permission` or `published-policy-explicitly-permits-automation`. These settings are *operator declarations*, not independent verification that permission exists.
 
-## Notes
+### 2. Configure a permitted source
 
-- **Expected normal state:** 0 studios. These locations use an automated-draw system with no waitlist — studios appear, have a short response window (hours to a few days), then disappear. You're alerting on the appearance.
-- **Respond fast.** When you get a ping, go to the listing link and submit your response within the deadline shown on the listing. Being alerted first means nothing if you take 6 hours to respond.
-- **GitHub cron is best-effort.** It usually runs within 1–3 min of schedule but occasionally skips slots during GitHub load spikes. For SE this is fine because listings stay open for hours.
-- **Changing locations:** edit `WANTED_LOCATIONS` at the top of `scraper.py`, commit, push.
-- **Pause alerts:** Actions tab → SE watcher → `⋯` → Disable workflow.
-- **Reset state** (re-alert on everything): delete contents of `seen.json`, commit an empty `[]`.
-
-## Troubleshooting
-
-| Symptom | Fix |
-|---|---|
-| No Telegram message after "Run workflow" + there's a studio on the site | Check the run logs. If `Parsed 0 studios total`, the site probably changed structure — open an issue or paste the `__NEXT_DATA__` shape so the parser can be adjusted. |
-| `HTTP 403` in logs | Site is blocking GitHub runner IPs. Rare for this site, but if it happens: run locally via cron (see note below) or use a residential proxy. |
-| No message at all, studio should match | Verify `TELEGRAM_CHAT_ID` is correct. Send `/start` to the bot again, re-check `getUpdates`. |
-| Workflow fails on commit | Under Settings → Actions → General → "Workflow permissions", select **Read and write permissions**. |
-
-### Running locally instead of GitHub Actions
-
-If GitHub ever blocks the site:
 ```bash
-pip install -r requirements.txt
-export TELEGRAM_BOT_TOKEN=... TELEGRAM_CHAT_ID=...
+python -m pip install -r requirements.txt
+cp config.example.json config.json
+```
+
+Open the ignored `config.json` and configure:
+
+```json
+{
+  "website": {
+    "listings_url": "https://your-approved-website.org/listings",
+    "permission_confirmed": true,
+    "permission_basis": "published-policy-explicitly-permits-automation",
+    "permission_reference": "https://your-approved-website.org/automation-policy"
+  },
+  "selectors": {
+    "item": ".listing-card",
+    "title": ".listing-title",
+    "link": "a.listing-link",
+    "price": ".price",
+    "location": ".location"
+  },
+  "filter_keywords": [],
+  "minimum_interval_seconds": 3600
+}
+```
+
+*The domains above are illustrative placeholders, not verified sources.* Replace the selectors with the actual site structure. `item`, `title` and `link` are required; `price` and `location` are optional. `filter_keywords` matches words in listing titles or locations (case-insensitive).
+
+The sample `config.example.json` is intentionally **non-operational** (`permission_confirmed: false` and an example-only URL).
+
+### 3. Preview an authorized page
+
+```bash
+python scraper.py --dry-run
+```
+
+This is **not an offline test**: it checks `robots.txt` and retrieves the configured public page, so permission is required. Preview mode does not send notifications or mark IDs seen, **but does record the check time to enforce the 1-hour minimum interval**.
+
+For a fully offline demo with no website contact, run the test suite:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+### 4. Enable Telegram alerts
+
+Obtain a bot token from Telegram's [BotFather](https://t.me/BotFather) and a destination chat ID. Keep both private.
+
+```bash
+export TELEGRAM_BOT_TOKEN="your-private-token"
+export TELEGRAM_CHAT_ID="your-private-chat-id"
 python scraper.py
 ```
-Then add to your crontab: `*/10 * * * * cd /path/to/se-scraper && /path/to/python scraper.py >> scraper.log 2>&1`
+
+On Windows PowerShell:
+
+```powershell
+$env:TELEGRAM_BOT_TOKEN = "your-private-token"
+$env:TELEGRAM_CHAT_ID = "your-private-chat-id"
+python scraper.py
+```
+
+The project makes no automated housing applications, purchases, or reservations. Notifications simply link to source listings.
+
+## GitHub Actions (optional, manual only)
+
+The `.github/workflows/scrape.yml` workflow has **no cron schedule**. To run it yourself, create three repository Actions secrets: `SITE_CONFIG_JSON` (the full private contents of your validated `config.json`), `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_CHAT_ID`. Then trigger **Actions → Manual listing monitor → Run workflow**.
+
+If the authorized check succeeds, GitHub Actions updates `seen.json` (a list of hashed, non-personal listing IDs and a timestamp) so duplicates and the minimum interval persist between manually triggered jobs. Never put tokens, cookies, personal information, or confidential permission documents in public repository files.
+
+If you later introduce scheduling, independently confirm the site's allowed rate first. Do not lower the script's one-hour limit or enable frequent polling solely because GitHub Actions allows it.
+
+## Responsible use
+
+**Software safeguards cannot determine whether scraping a given website is lawful.** Before each use:
+
+1. **Identify an affirmative basis for automation.** Review terms, API policies, any written permission, and local laws. Lack of an express ban is not an affirmative grant of rights.
+2. **Respect `robots.txt`.** This program checks it, but the robots standard explicitly says robots instructions **are not access authorization** ([RFC 9309](https://www.rfc-editor.org/rfc/rfc9309)).
+3. **Avoid protected or personal data.** Collect only necessary non-personal listing metadata. If a listing contains identifiable information, assess GDPR obligations before collecting it ([EDPB](https://www.edpb.europa.eu/topics/key-gdpr-concepts/legal-basis_en)).
+4. **Respect database and copyright rights.** Even public factual collections may be subject to protections against systematic extraction ([EU Database Directive 96/9/EC](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:31996L0009)). Avoid bulk copying and republishing source content.
+5. **Don't bypass restrictions.** No CAPTCHA solving, credential scraping, proxy rotation, IP-block evasion, user-agent impersonation, or unauthorized authentication. Stop on HTTP 401/403/429, prohibited robots paths, unexpected redirects, or website objections.
+6. **Minimize traffic.** Respect source-specific limits; the built-in one-hour floor is conservative, **not** a universal legal or technical safe harbor. Stop monitoring if the site asks you to.
+7. **Preserve attribution and audit records.** Keep dated proof of permission privately, and review permissions when site rules change.
+
+This template does **not** guarantee compliance with all contracts, laws, or regulatory regimes, and should not be construed as legal advice. If permission is ambiguous, request clarification from the website operator or use its official API.
+
+## Limitations
+
+- Handles **one static HTML page per check**, not JavaScript-only listings, logins, pagination, or arbitrary APIs.
+- CSS selectors must be adapted when a site's markup changes; it may report zero listings when selectors stop matching.
+- Telegram notification delivery can fail; failures stop processing and unconfirmed listings are not marked seen.
+- Permission checks are **declarations made by the operator**, not automated legal or terms-of-service verification.
+- The historical GitHub commit history may still contain code from the earlier housing-specific prototype; this refactor does **not** retroactively change that history.
+
+## Background & author
+
+Developed by **Badr El Jaouhari** as a personal Python automation project, originally motivated by difficulty tracking time-sensitive student accommodation. The generalized version demonstrates responsible automation design, HTML parsing, configuration-driven extraction, request limiting, state management, Telegram integration, and offline testing.
+
+**Not affiliated with or endorsed by any listing platform.**
