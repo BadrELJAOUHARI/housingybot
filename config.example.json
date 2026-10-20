@@ -1,0 +1,17 @@
+{
+  "website": {
+    "listings_url": "https://YOUR-APPROVED-SOURCE.example/listings",
+    "permission_confirmed": false,
+    "permission_basis": "written-permission",
+    "permission_reference": "Provide a reference to retained written permission or an explicit published policy"
+  },
+  "selectors": {
+    "item": ".listing-card",
+    "title": ".listing-title",
+    "link": "a.listing-link",
+    "price": ".listing-price",
+    "location": ".listing-location"
+  },
+  "filter_keywords": [],
+  "minimum_interval_seconds": 3600
+}
