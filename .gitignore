@@ -1,0 +1,10 @@
+# The operator supplies a site-specific configuration; never publish permission evidence or keys.
+config.json
+.env
+.env.*
+*.log
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
